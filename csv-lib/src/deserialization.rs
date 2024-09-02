@@ -8,9 +8,9 @@ use csv::Reader;
 use regex::Regex;
 
 use crate::constants::{IMPORTS, STRUCT_DERIVE};
-use crate::error::CustomError;
+use crate::error::{CustomError, Result};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DeserializationType {
     INTEGER,
     FLOATING,
@@ -31,6 +31,14 @@ impl std::fmt::Display for DeserializationType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum DeserializationValue {
+    INTEGER(i32),
+    FLOATING(f64),
+    BOOLEAN(bool),
+    STRING(String),
+}
+
 pub(crate) fn detect_col_type(value: &str) -> DeserializationType {
     let int_re = Regex::new(r"^\d+$").unwrap();
     let float_re = Regex::new(r"^(\d+)?\.\d+$").unwrap();
@@ -44,10 +52,43 @@ pub(crate) fn detect_col_type(value: &str) -> DeserializationType {
     }
 }
 
-pub fn generate_struct<F: AsRef<Path>>(
-    source: F,
-    dist: F,
-) -> Result<String, Box<dyn std::error::Error>> {
+pub fn parse_col_value(value: &str) -> Result<(DeserializationType, DeserializationValue)> {
+    match detect_col_type(value) {
+        DeserializationType::INTEGER => Ok((
+            DeserializationType::INTEGER,
+            DeserializationValue::INTEGER(value.parse()?),
+        )),
+        DeserializationType::FLOATING => Ok((
+            DeserializationType::FLOATING,
+            DeserializationValue::FLOATING(value.parse()?),
+        )),
+        DeserializationType::BOOLEAN => Ok((
+            DeserializationType::BOOLEAN,
+            DeserializationValue::BOOLEAN(value.parse()?),
+        )),
+        DeserializationType::STRING => Ok((
+            DeserializationType::STRING,
+            DeserializationValue::STRING(value.parse()?),
+        )),
+    }
+}
+
+pub fn compare_col_values(
+    val1: &DeserializationValue,
+    val2: &DeserializationValue,
+) -> Option<std::cmp::Ordering> {
+    match (val1, val2) {
+        (DeserializationValue::INTEGER(i1), DeserializationValue::INTEGER(i2)) => {
+            i1.partial_cmp(i2)
+        }
+        (DeserializationValue::FLOATING(f1), DeserializationValue::FLOATING(f2)) => {
+            f1.partial_cmp(f2)
+        }
+        _ => None,
+    }
+}
+
+pub fn generate_struct<F: AsRef<Path>>(source: F, dist: F) -> Result<String> {
     let mut reader = Reader::from_path(source.as_ref())?;
     let mut headers: Vec<String> = reader
         .headers()?
@@ -104,14 +145,14 @@ pub fn generate_struct<F: AsRef<Path>>(
 {}
 
 // Initial functions
-pub fn init(source: impl AsRef<Path>) -> Result<Vec<{}>, Box<dyn std::error::Error>> {{
+pub fn init(source: impl AsRef<Path>) -> Result<Vec<{StructName}>, Box<dyn std::error::Error>> {{
     let mut reader = Reader::from_path(source.as_ref())?;
-    let mut res: Vec<{}> = vec![];
+    let mut res: Vec<{StructName}> = vec![];
     for iter in reader.records() {{
         match iter {{
             Ok(data) => {{
                 let tmp: Vec<String> = data.into_iter().map(|s| s.trim().to_owned()).collect();
-                res.push({}::from(tmp));
+                res.push({StructName}::from(tmp));
             }}
             Err(e) => {{
                 return Err(Box::new(e));
@@ -125,9 +166,7 @@ pub fn init(source: impl AsRef<Path>) -> Result<Vec<{}>, Box<dyn std::error::Err
         IMPORTS.join("\n"),
         &struct_tmpl,
         &from_impl,
-        &struct_name,
-        &struct_name,
-        &struct_name
+        StructName = &struct_name
     );
 
     let mut fh = File::create(dist.as_ref())?;
