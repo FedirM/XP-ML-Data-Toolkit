@@ -1,5 +1,7 @@
 use std::{
-    borrow::Borrow, cmp::min, fs::{self, File}, io::Write, path::Path
+    fs::{self, File},
+    io::Write,
+    path::Path,
 };
 
 use csv::Reader;
@@ -8,59 +10,78 @@ use regex::Regex;
 use crate::constants::{IMPORTS, STRUCT_DERIVE};
 use crate::error::{CustomError, Result};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DeserializationType {
-    INTEGER(i32),
-    FLOATING(f64),
-    BOOLEAN(bool),
-    STRING(String),
-    EMPTY
-}
-
-impl DeserializationType {
-    pub fn display(&self) -> String {
-        format!("{}", self)
-    }
+    INTEGER,
+    FLOATING,
+    BOOLEAN,
+    STRING,
 }
 
 impl std::fmt::Display for DeserializationType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let col_type = match self {
-            DeserializationType::INTEGER(_) => "i32".to_owned(),
-            DeserializationType::FLOATING(_) => "f64".to_owned(),
-            DeserializationType::BOOLEAN(_) => "bool".to_owned(),
-            DeserializationType::STRING(_) => "String".to_owned(),
-            DeserializationType::EMPTY => "String".to_owned(),
+            DeserializationType::INTEGER => "i32".to_owned(),
+            DeserializationType::FLOATING => "f64".to_owned(),
+            DeserializationType::BOOLEAN => "bool".to_owned(),
+            DeserializationType::STRING => "String".to_owned(),
         };
 
         write!(f, "{col_type}")
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum DeserializationValue {
+    INTEGER(i32),
+    FLOATING(f64),
+    BOOLEAN(bool),
+    STRING(String),
+}
 
-pub(crate) fn parse_col_type(value: &str) -> Result<DeserializationType> {
+pub(crate) fn detect_col_type(value: &str) -> DeserializationType {
     let int_re = Regex::new(r"^\d+$").unwrap();
     let float_re = Regex::new(r"^(\d+)?\.\d+$").unwrap();
 
     match value {
         // TODO: For INT & FLOAT provide more viable check including num separation by [\s,_]
-        _ if int_re.is_match(value) => Ok(DeserializationType::INTEGER(value.parse()?)),
-        _ if float_re.is_match(value) => Ok(DeserializationType::FLOATING(value.parse()?)),
-        "FALSE" | "False" | "false" | "TRUE" | "True" | "true" => Ok(DeserializationType::BOOLEAN(value.parse()?)),
-        _ if !value.is_empty() => Ok(DeserializationType::STRING(value.to_owned())),
-        _ => Ok(DeserializationType::EMPTY)
+        _ if int_re.is_match(value) => DeserializationType::INTEGER,
+        _ if float_re.is_match(value) => DeserializationType::FLOATING,
+        "FALSE" | "False" | "false" | "TRUE" | "True" | "true" => DeserializationType::BOOLEAN,
+        _ => DeserializationType::STRING,
+    }
+}
+
+pub fn parse_col_value(value: &str) -> Result<(DeserializationType, DeserializationValue)> {
+    match detect_col_type(value) {
+        DeserializationType::INTEGER => Ok((
+            DeserializationType::INTEGER,
+            DeserializationValue::INTEGER(value.parse()?),
+        )),
+        DeserializationType::FLOATING => Ok((
+            DeserializationType::FLOATING,
+            DeserializationValue::FLOATING(value.parse()?),
+        )),
+        DeserializationType::BOOLEAN => Ok((
+            DeserializationType::BOOLEAN,
+            DeserializationValue::BOOLEAN(value.parse()?),
+        )),
+        DeserializationType::STRING => Ok((
+            DeserializationType::STRING,
+            DeserializationValue::STRING(value.parse()?),
+        )),
     }
 }
 
 pub fn compare_col_values(
-    val1: &DeserializationType,
-    val2: &DeserializationType,
+    val1: &DeserializationValue,
+    val2: &DeserializationValue,
 ) -> Option<std::cmp::Ordering> {
     match (val1, val2) {
-        (DeserializationType::INTEGER(i1),DeserializationType::INTEGER(i2)) => {
+        (DeserializationValue::INTEGER(i1), DeserializationValue::INTEGER(i2)) => {
             i1.partial_cmp(i2)
         }
-        (DeserializationType::FLOATING(f1),DeserializationType::FLOATING(f2)) => {
+        (DeserializationValue::FLOATING(f1), DeserializationValue::FLOATING(f2)) => {
             f1.partial_cmp(f2)
         }
         _ => None,
@@ -73,32 +94,17 @@ pub fn generate_struct<F: AsRef<Path>>(source: F, dist: F) -> Result<String> {
         .headers()?
         .clone()
         .into_iter()
-        .map(|s| s.trim().to_owned())
+        .map(|s| s.to_owned())
         .collect();
     headers = parse_headers(headers);
 
-    let mut data_row: Vec<String> = vec![String::default(); headers.len()];
-    let mut tmp: Vec<String> = Vec::with_capacity(headers.len());
-
-    for str_result in reader.records() {
-        let str_rec = str_result?;
-        tmp = str_rec.into_iter().map(|s| s.trim().to_owned()).collect();
-        println!("Curr row: {:?}", tmp);
-
-        // Prove: both vec assigned above!
-        for i in 0..min(data_row.len(), tmp.len()) {
-            if data_row[i].is_empty() && !tmp[i].is_empty() {
-                data_row[i] = tmp[i].clone();
-            }
-        }
-
-        if !data_row.contains(&String::default()) {
-            println!("Break {:?}", &data_row);
-            break;
-        }
-    }
-
-
+    let data_row: Vec<String> = if let Some(data) = reader.records().next() {
+        data?.into_iter().map(|s| s.trim().to_owned()).collect()
+    } else {
+        return Err(Box::new(CustomError::new(
+            "No data were found in csv file!",
+        )));
+    };
 
     let struct_name = if let Some(stem) = source.as_ref().file_stem().take() {
         to_struct_name(stem.to_str().unwrap())
@@ -114,8 +120,8 @@ pub fn generate_struct<F: AsRef<Path>>(source: F, dist: F) -> Result<String> {
     );
 
     for (id, h_item) in headers.iter().enumerate() {
-        let value_type = parse_col_type(&data_row[id])?;
-        struct_tmpl += &format!("\n\t{h_item}: {},", value_type.display());
+        let value_type = detect_col_type(&data_row[id]);
+        struct_tmpl += &format!("\n\t{h_item}: {value_type},",);
         from_impl += &format!("\n\t\t\t{h_item}: value[{id}].parse().expect(&format!(\"Could not parse '{{}}' for '{h_item}'!\", value[{id}])),");
     }
 
@@ -217,23 +223,23 @@ fn parse_headers(headers: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod test {
-    use super::{parse_col_type, DeserializationType};
+    use super::{detect_col_type, DeserializationType};
 
     #[test]
     fn test_type() {
         let raw = vec!["3", "3.3", "kek lol chebureck!", "FALSE"];
         let types = raw
             .into_iter()
-            .map(|s| parse_col_type(s).unwrap())
+            .map(|s| detect_col_type(s))
             .collect::<Vec<DeserializationType>>();
 
         assert_eq!(
             types,
             vec![
-                DeserializationType::INTEGER(3),
-                DeserializationType::FLOATING(3.3),
-                DeserializationType::STRING("kek lol chebureck!".to_owned()),
-                DeserializationType::BOOLEAN(false)
+                DeserializationType::INTEGER,
+                DeserializationType::FLOATING,
+                DeserializationType::STRING,
+                DeserializationType::BOOLEAN
             ]
         )
     }

@@ -7,17 +7,17 @@ pub mod deserialization;
 pub mod error;
 
 use deserialization::{
-    compare_col_values, parse_col_value, DeserializationType, DeserializationValue,
+    compare_col_values, parse_col_type, DeserializationType,
 };
 use error::Result;
 
-pub struct Toolkit {
+pub struct CsvToolkit {
     reader: Reader<File>,
-    min: HashMap<String, DeserializationValue>,
-    max: HashMap<String, DeserializationValue>,
+    pub min: HashMap<String, DeserializationType>,
+    pub max: HashMap<String, DeserializationType>,
 }
 
-impl Toolkit {
+impl CsvToolkit {
     pub fn new(
         src: impl AsRef<Path>,
         delimiter: u8,
@@ -31,7 +31,7 @@ impl Toolkit {
             None => Terminator::CRLF,
         };
 
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .trim(csv::Trim::All)
             .terminator(terminator)
             .flexible(true)
@@ -44,13 +44,15 @@ impl Toolkit {
         let mut min = HashMap::default();
         let mut max = HashMap::default();
 
+        Self::preprocessing(&mut reader, &mut min, &mut max)?;
+
         Ok(Self { reader, min, max })
     }
 
-    fn preparing(
+    fn preprocessing(
         reader: &mut Reader<File>,
-        min: HashMap<String, DeserializationValue>,
-        max: HashMap<String, DeserializationValue>,
+        min: &mut HashMap<String, DeserializationType>,
+        max: &mut HashMap<String, DeserializationType>,
     ) -> Result<()> {
         let headers: Vec<String> = reader
             .headers()?
@@ -59,20 +61,37 @@ impl Toolkit {
             .collect();
 
         for it in reader.records() {
-            match it {
-                Ok(res) => {
-                    for (header, variable) in headers.iter().zip(res.into_iter()) {
-                        let var = parse_col_value(variable)?.1;
-                    }
+            let res = it?;
+            for (header, variable) in headers.iter().zip(res.into_iter()) {
+                let var = parse_col_type(variable)?;
+
+                if header.contains("feat") {
+                    println!("Value: {}", variable);
                 }
-                Err(e) => todo!(),
+
+                match var {
+                    DeserializationType::FLOATING(_) | DeserializationType::INTEGER(_) => {
+                        if let Some(curr) = min.get(header).take() {
+                            min.insert(header.to_owned(), Self::get_min(curr.clone(), var.clone()));
+                        } else {
+                            min.insert(header.to_owned(), var.clone());
+                        }
+        
+                        if let Some(curr) = max.get(header).take() {
+                            max.insert(header.to_owned(), Self::get_max(curr.clone(), var.clone()));
+                        } else {
+                            max.insert(header.to_owned(), var.clone());
+                        }
+                    },
+                    _ => continue
+                }
             }
         }
 
         Ok(())
     }
 
-    fn get_min(curr: DeserializationValue, pt: DeserializationValue) -> DeserializationValue {
+    fn get_min(curr: DeserializationType, pt: DeserializationType) -> DeserializationType {
         match compare_col_values(&curr, &pt) {
             Some(ord) => match ord {
                 std::cmp::Ordering::Greater => pt,
@@ -82,7 +101,7 @@ impl Toolkit {
         }
     }
 
-    fn get_max(curr: DeserializationValue, pt: DeserializationValue) -> DeserializationValue {
+    fn get_max(curr: DeserializationType, pt: DeserializationType) -> DeserializationType {
         match compare_col_values(&curr, &pt) {
             Some(ord) => match ord {
                 std::cmp::Ordering::Less => pt,

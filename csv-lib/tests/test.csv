@@ -1,3 +1,8 @@
-id, column 1, done
-1, Kek, false
-2, Lol, true
+id, column 1, feat, done
+1, Kek, , false
+2, Lol, 23,true
+3, Lol-kek, 12,true
+4, Lol-kek, 14,true
+5, Lol-kek, 15,true
+6, Lol-kek, 16,true
+7, Lol-kek, 17,true
