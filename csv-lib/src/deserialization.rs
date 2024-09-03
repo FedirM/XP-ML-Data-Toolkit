@@ -8,26 +8,55 @@ use regex::Regex;
 use crate::constants::{IMPORTS, STRUCT_DERIVE};
 use crate::error::{CustomError, Result};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum DeserializationType {
-    INTEGER(i32),
-    FLOATING(f64),
+    NUMBER(f64),
     BOOLEAN(bool),
     STRING(String),
     EMPTY
+}
+
+impl PartialEq for DeserializationType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DeserializationType::BOOLEAN(x), DeserializationType::BOOLEAN(y)) => x.eq(y),
+            (DeserializationType::NUMBER(x), DeserializationType::NUMBER(y)) => x.eq(y),
+            (DeserializationType::STRING(x), DeserializationType::STRING(y)) => x.eq(y),
+            (DeserializationType::EMPTY, DeserializationType::EMPTY) => true,
+            _ => false
+        }
+    }
+}
+
+impl PartialOrd for DeserializationType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (DeserializationType::NUMBER(x), DeserializationType::NUMBER(y)) => x.partial_cmp(y),
+            _ => None
+        }
+    }
 }
 
 impl DeserializationType {
     pub fn display(&self) -> String {
         format!("{}", self)
     }
+
+    pub fn is_same_type(&self, other: &DeserializationType) -> bool {
+        match (self, other) {
+            (DeserializationType::BOOLEAN(_), DeserializationType::BOOLEAN(_)) => true,
+            (DeserializationType::NUMBER(_), DeserializationType::NUMBER(_)) => true,
+            (DeserializationType::STRING(_), DeserializationType::STRING(_)) => true,
+            (DeserializationType::EMPTY, DeserializationType::EMPTY) => true,
+            _ => false
+        }
+    }
 }
 
 impl std::fmt::Display for DeserializationType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let col_type = match self {
-            DeserializationType::INTEGER(_) => "i32".to_owned(),
-            DeserializationType::FLOATING(_) => "f64".to_owned(),
+            DeserializationType::NUMBER(_) => "f64".to_owned(),
             DeserializationType::BOOLEAN(_) => "bool".to_owned(),
             DeserializationType::STRING(_) => "String".to_owned(),
             DeserializationType::EMPTY => "String".to_owned(),
@@ -38,32 +67,16 @@ impl std::fmt::Display for DeserializationType {
 }
 
 
-pub(crate) fn parse_col_type(value: &str) -> Result<DeserializationType> {
+pub fn parse_col_type(value: &str) -> Result<DeserializationType> {
     let int_re = Regex::new(r"^\d+$").unwrap();
     let float_re = Regex::new(r"^(\d+)?\.\d+$").unwrap();
 
+    let value = value.trim();
     match value {
-        // TODO: For INT & FLOAT provide more viable check including num separation by [\s,_]
-        _ if int_re.is_match(value) => Ok(DeserializationType::INTEGER(value.parse()?)),
-        _ if float_re.is_match(value) => Ok(DeserializationType::FLOATING(value.parse()?)),
-        "FALSE" | "False" | "false" | "TRUE" | "True" | "true" => Ok(DeserializationType::BOOLEAN(value.parse()?)),
+        _ if int_re.is_match(value) | float_re.is_match(value) => Ok(DeserializationType::NUMBER(value.parse()?)),
+        "FALSE" | "False" | "false" | "TRUE" | "True" | "true" => Ok(DeserializationType::BOOLEAN(value.to_lowercase().parse()?)),
         _ if !value.is_empty() => Ok(DeserializationType::STRING(value.to_owned())),
         _ => Ok(DeserializationType::EMPTY)
-    }
-}
-
-pub fn compare_col_values(
-    val1: &DeserializationType,
-    val2: &DeserializationType,
-) -> Option<std::cmp::Ordering> {
-    match (val1, val2) {
-        (DeserializationType::INTEGER(i1),DeserializationType::INTEGER(i2)) => {
-            i1.partial_cmp(i2)
-        }
-        (DeserializationType::FLOATING(f1),DeserializationType::FLOATING(f2)) => {
-            f1.partial_cmp(f2)
-        }
-        _ => None,
     }
 }
 
@@ -204,24 +217,67 @@ fn parse_headers(headers: Vec<String>) -> Vec<String> {
     // Prove: pretty sure in correctness
     let incorrect_start = Regex::new(r"^[^a-z]+").unwrap();
     let unavailable_symbols = Regex::new(r"\W+").unwrap();
+    let clear_endings = Regex::new(r"(^_+)|(_+$)").unwrap();
 
     headers
         .into_iter()
-        .map(move |s| {
-            let clean_start =
-                String::from(incorrect_start.replace_all(s.to_lowercase().trim(), ""));
-            String::from(unavailable_symbols.replace_all(&clean_start, "_"))
+        .enumerate()
+        .map(move |(i,s)| {
+            let mut tmp = String::from(incorrect_start.replace_all(s.to_lowercase().trim(), ""));
+            tmp = String::from(unavailable_symbols.replace_all(&tmp, "_"));
+            tmp = String::from(clear_endings.replace_all(&tmp, ""));
+
+            if tmp.is_empty() {
+                tmp = format!("column_{}", i+1);
+            }
+
+            tmp
         })
         .collect()
 }
 
 #[cfg(test)]
 mod test {
-    use super::{parse_col_type, DeserializationType};
+    use super::{parse_col_type, parse_headers, DeserializationType};
 
     #[test]
-    fn test_type() {
-        let raw = vec!["3", "3.3", "kek lol chebureck!", "FALSE"];
+    fn test_is_same_type() {
+        let e1 = DeserializationType::EMPTY;
+        let e2 = DeserializationType::EMPTY;
+
+        assert!(e1.is_same_type(&e2));
+
+        let n1 = DeserializationType::NUMBER(1.2345);
+        let n2 = DeserializationType::NUMBER(3.345);
+
+        assert!(n1.is_same_type(&n2));
+
+        let s1 = DeserializationType::STRING("1.2345".to_owned());
+        let n1 = DeserializationType::NUMBER(3.345);
+
+        assert!(!s1.is_same_type(&n1));
+    }
+
+    #[test]
+    fn test_header_parsing() {
+        let raw = vec!["unique id", "kek lol chebureck!", "FALSE", "  ", "@@@@_Kekes_l___________"].into_iter().map(|s| s.to_owned()).collect();
+        let headers = parse_headers(raw);
+
+        assert_eq!(
+            headers,
+            vec![
+                "unique_id".to_owned(),
+                "kek_lol_chebureck".to_owned(),
+                "false".to_owned(),
+                "column_4".to_owned(),
+                "kekes_l".to_owned()
+            ]
+        )
+    }
+
+    #[test]
+    fn test_value_parsing() {
+        let raw = vec!["3", "3.3", "kek lol chebureck!", "FALSE", "  "];
         let types = raw
             .into_iter()
             .map(|s| parse_col_type(s).unwrap())
@@ -230,10 +286,11 @@ mod test {
         assert_eq!(
             types,
             vec![
-                DeserializationType::INTEGER(3),
-                DeserializationType::FLOATING(3.3),
+                DeserializationType::NUMBER(3_f64),
+                DeserializationType::NUMBER(3.3),
                 DeserializationType::STRING("kek lol chebureck!".to_owned()),
-                DeserializationType::BOOLEAN(false)
+                DeserializationType::BOOLEAN(false),
+                DeserializationType::EMPTY
             ]
         )
     }
