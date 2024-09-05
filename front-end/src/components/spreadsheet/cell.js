@@ -12,21 +12,20 @@ export class Cell {
      * @param {number} height - cell height in px
      * @param {"left" | "right" | "center"} alignment - data alignment inside cell box
      */
-    constructor( rowId, colId, data, width, height, alignment ) {
+    constructor( rowId, colId, data, width, alignment ) {
         this.rowId = rowId;
         this.colId = colId;
         this.data = data;
         this.width = width;
-        this.height = height;
         this.alignment = alignment;
 
-        let classList = (rowId === 0) ? "cell-header" : "cell-data";
+        let classList = (rowId === 0) ? ["cell-header"] : ["cell-data"];
 
         this.template = document.createElement("div");
         this.template.id = `${rowId}-${colId}`;
-        this.template.style = `width: ${width}px; height: ${height}px; text-align: ${alignment}`;
-        this.template.classList.add(classList);
-        this.template.innerHTML = `<span class="extra-information">${data}</span>`;
+        this.template.style = `width: ${width}px; text-align: ${alignment}`;
+        this.template.classList.add(...classList);
+        this.template.innerHTML = `<span>${data}</span>`;
     }
 
     /**

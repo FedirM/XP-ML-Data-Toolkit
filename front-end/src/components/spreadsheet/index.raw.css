@@ -1,8 +1,15 @@
 /* Spreadsheet CSS file */
 
 .spreadsheet-container {
+
+    --border-width: 1px;
+
+    /* margin-top: 200px; */
+
     width: 100%;
-    height: auto;
+    box-sizing: border-box;
+
+    padding-bottom: 20px;
 }
 
 .spreadsheet-row {
@@ -13,25 +20,38 @@
 .cell-header {
     flex: 0 0 auto;
     display: block;
-    border: 1px solid gray;
+    box-sizing: border-box;
+    border: var(--border-width) solid rgb(207, 207, 207);
     font-weight: 600;
+    font-size: larger;
+    padding: 8px 6px;
+
+    background: gray;
+
 }
 
 .cell-data {
     flex: 0 0 auto;
     display: block;
-    border: 1px solid gray;
+    box-sizing: border-box;
+    border: var(--border-width) solid gray;
     max-width: inherit;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-.extra-information {
+.cell-data > span, .cell-header > span {
+    width: calc(100% - var(--border-width));
+    max-width: inherit;
     display: block;
     box-sizing: border-box;
-    width: inherit;
-    max-width: inherit;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-  }
+}
+
+.sticky {
+    top: 0;
+    position: -webkit-sticky;
+    position: sticky;
+}
