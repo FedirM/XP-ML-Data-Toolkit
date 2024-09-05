@@ -1,0 +1,37 @@
+/* Spreadsheet CSS file */
+
+.spreadsheet-container {
+    width: 100%;
+    height: auto;
+}
+
+.spreadsheet-row {
+    display: flex;
+    flex-direction: row;
+}
+
+.cell-header {
+    flex: 0 0 auto;
+    display: block;
+    border: 1px solid gray;
+    font-weight: 600;
+}
+
+.cell-data {
+    flex: 0 0 auto;
+    display: block;
+    border: 1px solid gray;
+    max-width: inherit;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.extra-information {
+    display: block;
+    box-sizing: border-box;
+    width: inherit;
+    max-width: inherit;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }

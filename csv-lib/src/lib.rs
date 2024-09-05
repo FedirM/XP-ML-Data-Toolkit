@@ -5,21 +5,19 @@ use csv::{Position, Reader, ReaderBuilder, Terminator};
 pub mod constants;
 pub mod deserialization;
 pub mod error;
+pub mod user_input;
 
-
-use deserialization::{
-    parse_col_type, DeserializationType,
-};
+use deserialization::{parse_col_type, DeserializationType};
 use error::{CustomError, Result};
+use user_input::UserInput;
 
-type ColSpec = HashMap<usize, DeserializationType>; 
+type ColSpec = HashMap<usize, DeserializationType>;
 
 pub struct CsvToolkit {
-
-
     reader: Reader<File>,
 
     pub headers: Vec<String>,
+    pub types: Vec<DeserializationType>,
 
     pub min: HashMap<String, DeserializationType>,
     pub max: HashMap<String, DeserializationType>,
@@ -27,7 +25,7 @@ pub struct CsvToolkit {
     pub gaps: HashMap<usize, ColSpec>,
     pub outliers: HashMap<usize, ColSpec>,
 
-    data_position: Position
+    data_position: Position,
 }
 
 impl CsvToolkit {
@@ -55,7 +53,7 @@ impl CsvToolkit {
             .from_path(src)?;
 
         let mut data_position = Position::new();
-        let mut headers = reader
+        let headers = reader
             .headers()?
             .into_iter()
             .map(|s| s.to_owned())
@@ -69,11 +67,20 @@ impl CsvToolkit {
 
         let mut min = HashMap::default();
         let mut max = HashMap::default();
+        let mut types = Vec::new();
 
+        Self::preprocessing(&mut reader, &headers, &mut types, &mut min, &mut max)?;
 
-        Self::preprocessing(&mut reader, &headers, &mut min, &mut max)?;
-
-        Ok(Self { reader, headers, min, max, data_position, gaps: HashMap::default(), outliers: HashMap::default() })
+        Ok(Self {
+            reader,
+            headers,
+            types,
+            min,
+            max,
+            data_position,
+            gaps: HashMap::default(),
+            outliers: HashMap::default(),
+        })
     }
 
     pub fn set_min(&mut self, header: String, value: DeserializationType) -> Result<()> {
@@ -109,7 +116,8 @@ impl CsvToolkit {
 
         for (row_id, data_row) in self.reader.records().enumerate() {
             let data_row = data_row?;
-            for ((col_id, col_name), value) in self.headers.iter().enumerate().zip(data_row.iter()) {
+            for ((col_id, col_name), value) in self.headers.iter().enumerate().zip(data_row.iter())
+            {
                 let value = parse_col_type(value)?;
 
                 if value == DeserializationType::EMPTY {
@@ -123,38 +131,21 @@ impl CsvToolkit {
                         self.gaps.insert(row_id, col_hash);
                     }
                 } else {
-
                     // Update outliers
-                    if let Some(limit) = self.max.get(col_name) {
-                        let limit = limit.clone();
-                        if value > limit {
-                            if let Some(col_hash) = self.outliers.get_mut(&row_id) {
-                                col_hash.insert(col_id, limit);
-                            } else {
-                                let mut col_hash: HashMap<usize, DeserializationType> = HashMap::new();
-                                col_hash.insert(col_id, limit);
-                                self.outliers.insert(row_id, col_hash);
-                            }
-                        }
+                    if !value.is_ordered() {
+                        continue;
                     }
 
-                    
-                    if let Some(limit) = self.min.get(col_name) {
-                        let limit = limit.clone();
-                        if value < limit {
-                            if let Some(col_hash) = self.outliers.get_mut(&row_id) {
-                                col_hash.insert(col_id, limit);
-                            } else {
-                                let mut col_hash: HashMap<usize, DeserializationType> = HashMap::new();
-                                col_hash.insert(col_id, limit);
-                                self.outliers.insert(row_id, col_hash);
-                            }
-                        }
-                    }
+                    self.update_outliers(row_id, col_id, col_name, value);
                 }
             }
         }
 
+        Ok(())
+    }
+
+    pub fn normalizing(&mut self, column_list: Vec<String>) -> Result<()> {
+        self.reset_reader();
 
         Ok(())
     }
@@ -162,18 +153,16 @@ impl CsvToolkit {
     fn preprocessing(
         reader: &mut Reader<File>,
         headers: &Vec<String>,
+        types: &mut Vec<DeserializationType>,
         min: &mut HashMap<String, DeserializationType>,
         max: &mut HashMap<String, DeserializationType>,
     ) -> Result<()> {
-
         for it in reader.records() {
             let res = it?;
-            for (header, variable) in headers.iter().zip(res.into_iter()) {
+            for ((col_id, header), variable) in headers.iter().enumerate().zip(res.into_iter()) {
                 let var = parse_col_type(variable)?;
 
-                if header.contains("feat") {
-                    println!("Value: {}", variable);
-                }
+                Self::check_column_type(types, col_id, &header, &var)?;
 
                 match var {
                     DeserializationType::NUMBER(_) => {
@@ -182,14 +171,14 @@ impl CsvToolkit {
                         } else {
                             min.insert(header.to_owned(), var.clone());
                         }
-        
+
                         if let Some(curr) = max.get(header).take() {
                             max.insert(header.to_owned(), Self::max(curr.clone(), var.clone()));
                         } else {
                             max.insert(header.to_owned(), var.clone());
                         }
-                    },
-                    _ => continue
+                    }
+                    _ => continue,
                 }
             }
         }
@@ -221,15 +210,57 @@ impl CsvToolkit {
         self.reader.seek(self.data_position.clone())
     }
 
-    pub fn simple_iter(&mut self) -> Result<()> {
-        self.reset_reader()?;
-
-        println!("H: {:?}", self.reader.headers()?);
-
-        for r in self.reader.records() {
-            println!("R: {:?}", r?);
+    fn check_column_type(
+        types: &mut Vec<DeserializationType>,
+        column_id: usize,
+        column_name: &str,
+        column_value: &DeserializationType,
+    ) -> Result<()> {
+        if let Some(curr_type) = types.get(column_id) {
+            if !curr_type.is_same_type(column_value) {
+                return Err(Box::new(CustomError::new(&format!(
+                    "Seems like in column '{}' not all values are the same type!",
+                    column_name
+                ))));
+            }
+        } else {
+            types.insert(column_id, column_value.clone());
         }
-        
+
         Ok(())
+    }
+
+    fn update_outliers(
+        &mut self,
+        row_id: usize,
+        column_id: usize,
+        column_name: &str,
+        current_value: DeserializationType,
+    ) {
+        if let Some(limit) = self.max.get(column_name) {
+            let limit = limit.clone();
+            if current_value > limit {
+                if let Some(col_hash) = self.outliers.get_mut(&row_id) {
+                    col_hash.insert(column_id, limit);
+                } else {
+                    let mut col_hash: HashMap<usize, DeserializationType> = HashMap::new();
+                    col_hash.insert(column_id, limit);
+                    self.outliers.insert(row_id, col_hash);
+                }
+            }
+        }
+
+        if let Some(limit) = self.min.get(column_name) {
+            let limit = limit.clone();
+            if current_value < limit {
+                if let Some(col_hash) = self.outliers.get_mut(&row_id) {
+                    col_hash.insert(column_id, limit);
+                } else {
+                    let mut col_hash: HashMap<usize, DeserializationType> = HashMap::new();
+                    col_hash.insert(column_id, limit);
+                    self.outliers.insert(row_id, col_hash);
+                }
+            }
+        }
     }
 }

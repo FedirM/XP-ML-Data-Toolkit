@@ -1,0 +1,1 @@
+(()=>{"use strict";const o=document.getElementById("root");o||console.error("Could not find the root element!"),console.log("Hello, World!"),console.log("ROOT: ",o)})();

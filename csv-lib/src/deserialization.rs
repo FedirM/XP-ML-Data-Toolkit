@@ -1,19 +1,22 @@
 use std::{
-    borrow::Borrow, cmp::min, fs::{self, File}, io::Write, path::Path
+    cmp::min,
+    fs::{self, File},
+    io::Write,
+    path::Path,
 };
 
 use csv::Reader;
 use regex::Regex;
 
 use crate::constants::{IMPORTS, STRUCT_DERIVE};
-use crate::error::{CustomError, Result};
+use crate::error::Result;
 
 #[derive(Debug, Clone)]
 pub enum DeserializationType {
     NUMBER(f64),
     BOOLEAN(bool),
     STRING(String),
-    EMPTY
+    EMPTY,
 }
 
 impl PartialEq for DeserializationType {
@@ -23,7 +26,7 @@ impl PartialEq for DeserializationType {
             (DeserializationType::NUMBER(x), DeserializationType::NUMBER(y)) => x.eq(y),
             (DeserializationType::STRING(x), DeserializationType::STRING(y)) => x.eq(y),
             (DeserializationType::EMPTY, DeserializationType::EMPTY) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -32,7 +35,7 @@ impl PartialOrd for DeserializationType {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (DeserializationType::NUMBER(x), DeserializationType::NUMBER(y)) => x.partial_cmp(y),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -48,8 +51,12 @@ impl DeserializationType {
             (DeserializationType::NUMBER(_), DeserializationType::NUMBER(_)) => true,
             (DeserializationType::STRING(_), DeserializationType::STRING(_)) => true,
             (DeserializationType::EMPTY, DeserializationType::EMPTY) => true,
-            _ => false
+            _ => false,
         }
+    }
+
+    pub fn is_ordered(&self) -> bool {
+        return self.is_same_type(&DeserializationType::NUMBER(f64::default()));
     }
 }
 
@@ -66,17 +73,20 @@ impl std::fmt::Display for DeserializationType {
     }
 }
 
-
 pub fn parse_col_type(value: &str) -> Result<DeserializationType> {
     let int_re = Regex::new(r"^\d+$").unwrap();
     let float_re = Regex::new(r"^(\d+)?\.\d+$").unwrap();
 
     let value = value.trim();
     match value {
-        _ if int_re.is_match(value) | float_re.is_match(value) => Ok(DeserializationType::NUMBER(value.parse()?)),
-        "FALSE" | "False" | "false" | "TRUE" | "True" | "true" => Ok(DeserializationType::BOOLEAN(value.to_lowercase().parse()?)),
+        _ if int_re.is_match(value) | float_re.is_match(value) => {
+            Ok(DeserializationType::NUMBER(value.parse()?))
+        }
+        "FALSE" | "False" | "false" | "TRUE" | "True" | "true" => {
+            Ok(DeserializationType::BOOLEAN(value.to_lowercase().parse()?))
+        }
         _ if !value.is_empty() => Ok(DeserializationType::STRING(value.to_owned())),
-        _ => Ok(DeserializationType::EMPTY)
+        _ => Ok(DeserializationType::EMPTY),
     }
 }
 
@@ -110,8 +120,6 @@ pub fn generate_struct<F: AsRef<Path>>(source: F, dist: F) -> Result<String> {
             break;
         }
     }
-
-
 
     let struct_name = if let Some(stem) = source.as_ref().file_stem().take() {
         to_struct_name(stem.to_str().unwrap())
@@ -222,13 +230,13 @@ fn parse_headers(headers: Vec<String>) -> Vec<String> {
     headers
         .into_iter()
         .enumerate()
-        .map(move |(i,s)| {
+        .map(move |(i, s)| {
             let mut tmp = String::from(incorrect_start.replace_all(s.to_lowercase().trim(), ""));
             tmp = String::from(unavailable_symbols.replace_all(&tmp, "_"));
             tmp = String::from(clear_endings.replace_all(&tmp, ""));
 
             if tmp.is_empty() {
-                tmp = format!("column_{}", i+1);
+                tmp = format!("column_{}", i + 1);
             }
 
             tmp
@@ -260,7 +268,16 @@ mod test {
 
     #[test]
     fn test_header_parsing() {
-        let raw = vec!["unique id", "kek lol chebureck!", "FALSE", "  ", "@@@@_Kekes_l___________"].into_iter().map(|s| s.to_owned()).collect();
+        let raw = vec![
+            "unique id",
+            "kek lol chebureck!",
+            "FALSE",
+            "  ",
+            "@@@@_Kekes_l___________",
+        ]
+        .into_iter()
+        .map(|s| s.to_owned())
+        .collect();
         let headers = parse_headers(raw);
 
         assert_eq!(
