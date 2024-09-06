@@ -1,8 +1,15 @@
-id, user name, feat, done
-1, Kek, , false
-2, Lol, 23,true
-3, Lol-kek, 12,true
-4, Lol-kek, 14,true
-5, Lol-kek, 15,true
-6, Lol-kek, 16,true
-7, Lol-kek, 17,true
+Patient ID,Age,Sex,Cholesterol,Blood Pressure,Heart Rate,Diabetes,Family History,Smoking,Obesity,Alcohol Consumption,Exercise Hours Per Week,Diet,Previous Heart Problems,Medication Use,Stress Level,Sedentary Hours Per Day,Income,BMI,Triglycerides,Physical Activity Days Per Week,Sleep Hours Per Day,Country,Continent,Hemisphere,Heart Attack Risk
+BMW7812,67,Male,208,158/88,72,0,0,1,0,0,4.168188835442079,Average,0,0,9,6.6150014529140595,261404,31.251232725295402,286,0,6,Argentina,South America,Southern Hemisphere,0
+CZE1114,21,Male,389,165/93,98,1,1,1,1,1,1.8132416178634458,Unhealthy,1,0,1,4.963458839757678,285768,27.1949733519874,235,1,7,Canada,North America,Northern Hemisphere,0
+BNI9906,21,Female,324,174/99,72,1,0,0,0,0,2.0783529861178884,Healthy,1,1,9,9.463425838029828,235282,28.176570683909873,587,4,4,France,Europe,Northern Hemisphere,0
+JLN3497,84,Male,383,163/100,73,1,1,1,0,1,9.82812959348533,Average,1,0,9,7.648980824461007,125640,36.464704293082846,378,3,4,Canada,North America,Northern Hemisphere,0
+GFO8847,66,Male,318,91/88,93,1,1,1,1,0,5.804298820315434,Unhealthy,1,0,6,1.5148209264291386,160555,21.809144180619754,231,1,5,Thailand,Asia,Northern Hemisphere,0
+ZOO7941,54,Female,297,172/86,48,1,1,1,0,1,0.6250080237057354,Unhealthy,1,1,2,7.798752408582432,241339,20.146839503010046,795,5,10,Germany,Europe,Northern Hemisphere,1
+WYV0966,90,Male,358,102/73,84,0,0,1,0,1,4.098177090985471,Healthy,0,0,7,0.6273560009569512,190450,28.885810606590454,284,4,10,Canada,North America,Northern Hemisphere,1
+XXM0972,84,Male,220,131/68,107,0,0,1,1,1,3.427928754300873,Average,0,1,4,10.543780239266841,122093,22.2218617394038,370,6,7,Japan,Asia,Northern Hemisphere,1
+XCQ5937,20,Male,145,144/105,68,1,0,1,1,0,16.868302239450017,Average,0,0,5,11.348786873498993,25086,35.80990131909641,790,7,4,Brazil,South America,Southern Hemisphere,0
+FTJ5456,43,Female,248,160/70,55,0,1,1,1,1,0.1945150606299495,Unhealthy,0,0,4,4.055114781794609,209703,22.55891675229818,232,7,7,Japan,Asia,Northern Hemisphere,0
+HSD6283,73,Female,373,107/69,97,1,1,1,0,1,16.841987593616683,Average,1,1,8,8.919879240644143,50030,22.867910772851292,469,0,4,South Africa,Africa,Southern Hemisphere,0
+YSP0073,71,Male,374,158/71,70,1,1,1,1,1,8.251995072165778,Average,0,0,4,7.227338314321001,163066,32.48534524081809,523,4,8,United States,North America,Northern Hemisphere,0
+FPS0415,77,Male,228,101/72,68,1,1,1,1,1,19.633268156072297,Unhealthy,0,0,9,10.91752425375187,29886,35.10223615396757,590,7,6,Vietnam,Asia,Northern Hemisphere,1
+YYU9565,60,Male,259,169/72,85,1,1,1,0,1,17.037374183793826,Healthy,1,1,1,8.727417211573485,292173,25.564897154053256,506,1,4,China,Asia,Northern Hemisphere,1

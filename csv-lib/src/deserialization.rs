@@ -2,6 +2,7 @@ use std::{
     cmp::min,
     fs::{self, File},
     io::Write,
+    ops::Sub,
     path::Path,
 };
 
@@ -11,12 +12,85 @@ use regex::Regex;
 use crate::constants::{IMPORTS, STRUCT_DERIVE};
 use crate::error::Result;
 
+#[macro_export]
+macro_rules! min {
+    ($x:expr) => {
+        match $x {
+            DeserializationType::NUMBER(_) => $x,
+            _ => panic!("Incompatible expression type!"),
+        }
+    };
+
+    ($x:expr, $y:expr) => {
+        match ($x, $y) {
+            (DeserializationType::NUMBER(a), DeserializationType::NUMBER(b)) => {
+                if a < b { DeserializationType::NUMBER(a) } else { DeserializationType::NUMBER(b) }
+            },
+            _ => panic!("Incompatible expression type!"),
+        }
+    };
+
+    ($x:expr, $y:expr, $( $rest:expr ),+) => {
+        {
+            match ($x, $y) {
+                (DeserializationType::NUMBER(a), DeserializationType::NUMBER(b)) => {
+                    let min_of_two = if a < b { DeserializationType::NUMBER(a) } else { DeserializationType::NUMBER(b) };
+                    min!(min_of_two, $( $rest ),+)
+                },
+                _ => panic!("Incompatible expression type!"),
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! max {
+    ($x:expr) => {
+        match $x {
+            DeserializationType::NUMBER(_) => $x,
+            _ => panic!("Incompatible expression type!"),
+        }
+    };
+
+    ($x:expr, $y:expr) => {
+        match ($x, $y) {
+            (DeserializationType::NUMBER(a), DeserializationType::NUMBER(b)) => {
+                if a > b { DeserializationType::NUMBER(a) } else { DeserializationType::NUMBER(b) }
+            },
+            _ => panic!("Incompatible expression type!"),
+        }
+    };
+
+    ($x:expr, $y:expr, $( $rest:expr ),+) => {
+        {
+            match ($x, $y) {
+                (DeserializationType::NUMBER(a), DeserializationType::NUMBER(b)) => {
+                    let max_of_two = if a > b { DeserializationType::NUMBER(a) } else { DeserializationType::NUMBER(b) };
+                    max!(max_of_two, $( $rest ),+)
+                },
+                _ => panic!("Incompatible expression type!"),
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone)]
 pub enum DeserializationType {
     NUMBER(f64),
     BOOLEAN(bool),
     STRING(String),
     EMPTY,
+}
+
+impl Sub<Self> for DeserializationType {
+    type Output = f64;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (DeserializationType::NUMBER(x), DeserializationType::NUMBER(y)) => x.sub(y),
+            _ => panic!("Could not subtract non numeric value(s)."),
+        }
+    }
 }
 
 impl PartialEq for DeserializationType {
@@ -90,6 +164,21 @@ pub fn parse_col_type(value: &str) -> Result<DeserializationType> {
     }
 }
 
+/// Make a mod file to work with passed csv source file in Rust
+///
+/// This function takes a path to the source csv file, analyze it and return a mod in a String format to work with those data in common Rust format.
+/// Could be handy as a part of CLI tool.
+///
+/// # Arguments
+/// `source` - Path to source csv file
+/// `dist` - Path to the output dir/file
+///
+/// # Return
+/// A copy of `dist` content as a String
+///
+/// # Errors
+/// fs, io, type coersion;
+
 pub fn generate_struct<F: AsRef<Path>>(source: F, dist: F) -> Result<String> {
     let mut reader = Reader::from_path(source.as_ref())?;
     let mut headers: Vec<String> = reader
@@ -101,7 +190,7 @@ pub fn generate_struct<F: AsRef<Path>>(source: F, dist: F) -> Result<String> {
     headers = parse_headers(headers);
 
     let mut data_row: Vec<String> = vec![String::default(); headers.len()];
-    let mut tmp: Vec<String> = Vec::with_capacity(headers.len());
+    let mut tmp: Vec<String>;
 
     for str_result in reader.records() {
         let str_rec = str_result?;
@@ -192,6 +281,15 @@ pub fn init(source: impl AsRef<Path>) -> Result<Vec<{StructName}>, Box<dyn std::
 
 // HELPERS
 
+/// Convert OS file name to applicable to struct name;
+///
+/// # Arguments
+///
+/// * `file_name` - OS like file name. (Probably file stem from fs lib)
+///
+/// # Return
+/// String value of applicable rust struct name;
+///
 fn to_struct_name(file_name: &str) -> String {
     let trimmed = file_name.trim();
 
@@ -217,6 +315,15 @@ fn to_struct_name(file_name: &str) -> String {
     struct_name
 }
 
+/// Convert csv headers strings to strings applicable to struct property names;
+///
+/// # Arguments
+///
+/// * `headers` - Common strings in vectors
+///
+/// # Return
+/// Vector of strings which could be used as a struct property
+///
 fn parse_headers(headers: Vec<String>) -> Vec<String> {
     if headers.is_empty() {
         return Vec::default();
